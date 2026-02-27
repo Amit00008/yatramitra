@@ -1,6 +1,10 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import type { FormEvent } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { MapPin, User, Hotel, Settings, Eye, EyeOff } from "lucide-react";
+import { apiRequest } from "@/lib/api";
+import type { AuthUser } from "@/lib/auth";
+import { setAuthSession } from "@/lib/auth";
 
 const roles = [
   {
@@ -24,11 +28,44 @@ const roles = [
 ];
 
 const LoginPage = () => {
+  const navigate = useNavigate();
   const [selectedRole, setSelectedRole] = useState("visitor");
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const roleLabel = roles.find((r) => r.id === selectedRole)?.label ?? "Visitor";
+
+  const getRoleHomePath = () => "/dashboard";
+
+  const handleLogin = async (event: FormEvent) => {
+    event.preventDefault();
+    setError("");
+    setLoading(true);
+
+    try {
+      const response = await apiRequest<{ token: string; user: AuthUser }>("/api/auth/login", {
+        method: "POST",
+        body: { email, password },
+      });
+
+      if (response.user.role !== selectedRole) {
+        setError(`This account is registered as ${response.user.role}. Please select the same role.`);
+        setLoading(false);
+        return;
+      }
+
+      setAuthSession(response.token, response.user);
+      navigate(getRoleHomePath());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Login failed");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-muted flex flex-col items-center justify-center px-4 py-12">
@@ -64,12 +101,14 @@ const LoginPage = () => {
           Login as <span className="text-primary">{roleLabel}</span>
         </h2>
 
-        <div className="space-y-4">
+        <form className="space-y-4" onSubmit={handleLogin}>
           <div>
             <label className="text-sm font-medium text-foreground mb-1.5 block">Email Address</label>
             <input
-              type="email"
+              type="text"
               placeholder="you@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               className="w-full rounded-lg border border-border bg-background px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all"
             />
           </div>
@@ -80,6 +119,8 @@ const LoginPage = () => {
               <input
                 type={showPassword ? "text" : "password"}
                 placeholder="Enter your password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
                 className="w-full rounded-lg border border-border bg-background px-4 py-3 pr-10 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all"
               />
               <button
@@ -105,8 +146,14 @@ const LoginPage = () => {
             <a href="#" className="text-sm text-primary hover:underline">Forgot Password?</a>
           </div>
 
-          <button className="w-full rounded-lg bg-primary py-3 text-sm font-semibold text-primary-foreground transition-colors duration-200 hover:bg-primary/90 active:scale-[0.99]">
-            Login
+          {error && <p className="text-sm text-destructive">{error}</p>}
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full rounded-lg bg-primary py-3 text-sm font-semibold text-primary-foreground transition-colors duration-200 hover:bg-primary/90 active:scale-[0.99] disabled:opacity-60"
+          >
+            {loading ? "Logging in..." : "Login"}
           </button>
 
           <div className="flex items-center gap-3 my-2">
@@ -115,11 +162,14 @@ const LoginPage = () => {
             <div className="flex-1 h-px bg-border" />
           </div>
 
-          <button className="w-full rounded-lg border border-border bg-background py-3 text-sm font-medium text-foreground transition-colors duration-200 hover:bg-muted flex items-center justify-center gap-2">
+          <button
+            type="button"
+            className="w-full rounded-lg border border-border bg-background py-3 text-sm font-medium text-foreground transition-colors duration-200 hover:bg-muted flex items-center justify-center gap-2"
+          >
             <span className="font-bold text-base">G</span>
             Continue with Google
           </button>
-        </div>
+        </form>
 
         <p className="text-center text-sm text-muted-foreground mt-6">
           Don't have an account?{" "}

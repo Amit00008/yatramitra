@@ -1,6 +1,10 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import type { FormEvent } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { MapPin, User, Hotel, Settings, Eye, EyeOff } from "lucide-react";
+import { apiRequest } from "@/lib/api";
+import type { AuthUser } from "@/lib/auth";
+import { setAuthSession } from "@/lib/auth";
 
 const roles = [
   {
@@ -24,11 +28,54 @@ const roles = [
 ];
 
 const SignupPage = () => {
+  const navigate = useNavigate();
   const [selectedRole, setSelectedRole] = useState("visitor");
   const [showPassword, setShowPassword] = useState(false);
   const [agreeTerms, setAgreeTerms] = useState(false);
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [password, setPassword] = useState("");
+  const [adminSignupKey, setAdminSignupKey] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const roleLabel = roles.find((r) => r.id === selectedRole)?.label ?? "Visitor";
+
+  const getRoleHomePath = () => "/dashboard";
+
+  const handleSignup = async (event: FormEvent) => {
+    event.preventDefault();
+    setError("");
+
+    if (!agreeTerms) {
+      setError("Please accept terms and privacy policy to continue.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await apiRequest<{ token: string; user: AuthUser }>("/api/auth/signup", {
+        method: "POST",
+        body: {
+          firstName,
+          lastName,
+          email,
+          phone,
+          password,
+          role: selectedRole,
+          adminSignupKey: selectedRole === "admin" ? adminSignupKey : undefined,
+        },
+      });
+      setAuthSession(response.token, response.user);
+      navigate(getRoleHomePath());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Signup failed");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-muted flex flex-col items-center justify-center px-4 py-12">
@@ -64,13 +111,15 @@ const SignupPage = () => {
           Sign up as <span className="text-primary">{roleLabel}</span>
         </h2>
 
-        <div className="space-y-4">
+        <form className="space-y-4" onSubmit={handleSignup}>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="text-sm font-medium text-foreground mb-1.5 block">First Name</label>
               <input
                 type="text"
                 placeholder="John"
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
                 className="w-full rounded-lg border border-border bg-background px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all"
               />
             </div>
@@ -79,6 +128,8 @@ const SignupPage = () => {
               <input
                 type="text"
                 placeholder="Doe"
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
                 className="w-full rounded-lg border border-border bg-background px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all"
               />
             </div>
@@ -89,6 +140,8 @@ const SignupPage = () => {
             <input
               type="email"
               placeholder="you@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               className="w-full rounded-lg border border-border bg-background px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all"
             />
           </div>
@@ -98,6 +151,8 @@ const SignupPage = () => {
             <input
               type="tel"
               placeholder="+91 9876543210"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
               className="w-full rounded-lg border border-border bg-background px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all"
             />
           </div>
@@ -108,6 +163,8 @@ const SignupPage = () => {
               <input
                 type={showPassword ? "text" : "password"}
                 placeholder="Create a strong password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
                 className="w-full rounded-lg border border-border bg-background px-4 py-3 pr-10 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all"
               />
               <button
@@ -119,6 +176,19 @@ const SignupPage = () => {
               </button>
             </div>
           </div>
+
+          {selectedRole === "admin" && (
+            <div>
+              <label className="text-sm font-medium text-foreground mb-1.5 block">Admin Signup Key</label>
+              <input
+                type="text"
+                placeholder="Enter admin key"
+                value={adminSignupKey}
+                onChange={(e) => setAdminSignupKey(e.target.value)}
+                className="w-full rounded-lg border border-border bg-background px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all"
+              />
+            </div>
+          )}
 
           <label className="flex items-start gap-2 text-sm text-foreground cursor-pointer">
             <input
@@ -135,8 +205,14 @@ const SignupPage = () => {
             </span>
           </label>
 
-          <button className="w-full rounded-lg bg-primary py-3 text-sm font-semibold text-primary-foreground transition-colors duration-200 hover:bg-primary/90 active:scale-[0.99]">
-            Create Account
+          {error && <p className="text-sm text-destructive">{error}</p>}
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full rounded-lg bg-primary py-3 text-sm font-semibold text-primary-foreground transition-colors duration-200 hover:bg-primary/90 active:scale-[0.99] disabled:opacity-60"
+          >
+            {loading ? "Creating account..." : "Create Account"}
           </button>
 
           <div className="flex items-center gap-3 my-2">
@@ -145,11 +221,14 @@ const SignupPage = () => {
             <div className="flex-1 h-px bg-border" />
           </div>
 
-          <button className="w-full rounded-lg border border-border bg-background py-3 text-sm font-medium text-foreground transition-colors duration-200 hover:bg-muted flex items-center justify-center gap-2">
+          <button
+            type="button"
+            className="w-full rounded-lg border border-border bg-background py-3 text-sm font-medium text-foreground transition-colors duration-200 hover:bg-muted flex items-center justify-center gap-2"
+          >
             <span className="font-bold text-base">G</span>
             Continue with Google
           </button>
-        </div>
+        </form>
 
         <p className="text-center text-sm text-muted-foreground mt-6">
           Already have an account?{" "}
